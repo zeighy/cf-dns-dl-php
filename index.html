@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloudflare DNS Records Fetcher</title>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; padding: 20px; max-width: 800px; margin: 0 auto; }
+        h1 { color: #333; }
+        form { background: #f4f4f4; padding: 20px; border-radius: 5px; margin-bottom: 20px; }
+        label { display: block; margin-bottom: 5px; }
+        input[type="text"], textarea { width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 3px; }
+        button { background: #333; color: #fff; padding: 10px 15px; border: none; border-radius: 3px; cursor: pointer; }
+        button:hover { background: #444; }
+        #results { width: 100%; height: 300px; margin-top: 20px; }
+        .info-link { font-size: 0.9em; color: #0066cc; text-decoration: none; }
+        .info-link:hover { text-decoration: underline; }
+        .info-text { font-size: 0.9em; color: #666; margin-top: 5px; }
+        .mode-toggle { margin-bottom: 15px; }
+        .mode-toggle label { display: inline; margin-right: 10px; }
+        #loading { display: none; }
+        #captcha { margin-bottom: 15px; }
+    </style>
+</head>
+<body>
+    <h1>Cloudflare DNS Records Fetcher</h1>
+    
+    <form id="dns-form">
+        <div class="mode-toggle">
+            <label>
+                <input type="radio" name="mode" value="account" checked onclick="toggleMode('account')"> Use Account ID
+            </label>
+            <label>
+                <input type="radio" name="mode" value="zone" onclick="toggleMode('zone')"> Use Zone ID(s)
+            </label>
+        </div>
+
+        <label for="api_token">API Token:</label>
+        <input type="text" id="api_token" name="api_token" required>
+        <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" class="info-link">Get or generate your API token here</a>
+        <p class="info-text">Generate token through template 'Edit Zone DNS' and under the Zone Resources select 'All Zones'. Give the Token a name you can easily identify later.</p>
+        
+        <div id="account_id_section">
+            <label for="account_id">Account ID:</label>
+            <input type="text" id="account_id" name="account_id">
+            <p class="info-text">You can find your Account ID in the Cloudflare dashboard. Go to the Account Home page and look for "Account ID" in the right sidebar.</p>
+        </div>
+
+        <div id="zone_ids_section" style="display: none;">
+            <label for="zone_ids">Zone ID(s) (comma-separated):</label>
+            <textarea id="zone_ids" name="zone_ids" rows="3"></textarea>
+            <p class="info-text">Enter each Zone ID separately, separated by commas. You can find the Zone ID in the Overview page of each domain under the API section at the bottom right.</p>
+        </div>
+
+      <!-- Don't forget to update and add your CF Turnstile Key here assuming you are deploying for public use. -->
+        <div id="captcha" class="cf-turnstile" data-sitekey="YOUR_TURNSTILE_SITE_KEY"></div>
+        
+        <button type="submit">Fetch DNS Records</button>
+    </form>
+
+    <div id="loading">Fetching records, please wait...</div>
+    <textarea id="results" readonly style="display: none;"></textarea>
+    <button id="download" style="display: none;">Download Results</button>
+
+    <script>
+        function toggleMode(mode) {
+            document.getElementById('account_id_section').style.display = mode === 'account' ? 'block' : 'none';
+            document.getElementById('zone_ids_section').style.display = mode === 'zone' ? 'block' : 'none';
+        }
+
+        document.getElementById('dns-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            const results = document.getElementById('results');
+            const loading = document.getElementById('loading');
+            const downloadBtn = document.getElementById('download');
+
+            results.style.display = 'none';
+            downloadBtn.style.display = 'none';
+            loading.style.display = 'block';
+
+            // Get the Turnstile token
+            const token = turnstile.getResponse();
+            formData.append('cf-turnstile-response', token);
+
+            fetch('fetch_records.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.text())
+            .then(data => {
+                results.value = data;
+                results.style.display = 'block';
+                downloadBtn.style.display = 'inline-block';
+                loading.style.display = 'none';
+                // Reset Turnstile after successful submission
+                turnstile.reset();
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                results.value = 'An error occurred while fetching the records.';
+                results.style.display = 'block';
+                loading.style.display = 'none';
+                // Reset Turnstile after error
+                turnstile.reset();
+            });
+        });
+
+        document.getElementById('download').addEventListener('click', function() {
+            const results = document.getElementById('results').value;
+            const blob = new Blob([results], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'cloudflare_dns_records.txt';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+    </script>
+</body>
+</html>
